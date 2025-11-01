@@ -336,25 +336,57 @@
       });
 
       // --- запуск камеры и игры ---
-      navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
-        video.srcObject = stream;
-        const camera = new Camera(video, {
-          onFrame: async () => {
-            await hands.send({ image: video });
-          },
-          width: 160,
-          height: 120,
-        });
-        camera.start();
+      async function startCameraAndGame() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
+          video.srcObject = stream;
 
-        // Запуск игры только после готовности видео
-        const waitForVideo = setInterval(() => {
-          if (video.readyState >= 2) {
-            clearInterval(waitForVideo);
-            initGame();
-            loop(performance.now());
-          }
-        }, 200);
+          const camera = new Camera(video, {
+            onFrame: async () => {
+              await hands.send({ image: video });
+            },
+            width: 160,
+            height: 120,
+          });
+          camera.start();
+
+          const waitForVideo = setInterval(() => {
+            if (video.readyState >= 2) {
+              clearInterval(waitForVideo);
+              initGame();
+              loop(performance.now());
+            }
+          }, 200);
+        } catch (err) {
+          alert("Не удалось получить доступ к камере: " + err.message);
+          console.error(err);
+        }
+      }
+
+      // 🔹 Добавляем кнопку для запроса доступа (обязательно для мобильных)
+      const startBtn = document.createElement("button");
+      startBtn.textContent = "Запустить камеру и игру";
+      startBtn.style.cssText = `
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			padding: 14px 24px;
+			font-size: 18px;
+			background: #0066ff;
+			color: white;
+			border: none;
+			border-radius: 8px;
+			box-shadow: 0 0 20px rgba(0,0,0,0.4);
+		`;
+      document.body.appendChild(startBtn);
+
+      startBtn.addEventListener("click", async () => {
+        startBtn.remove();
+        await startCameraAndGame();
       });
     </script>
   </body>
