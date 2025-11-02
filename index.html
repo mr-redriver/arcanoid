@@ -103,18 +103,24 @@
         gameOver = false;
       let paddle,
         ball,
-        rows = 6,
-        cols = 10,
-        pad = 8,
-        offTop = 100,
-        offLeft = 60,
         bw,
         bh,
         bricks = [];
+      let rows = 6,
+        cols = 10,
+        pad = 8,
+        offTop = 100,
+        offLeft = 60;
       let pointX = 0,
         fingersUp = 0,
         gestureCooldown = 0;
       const smoothFactor = 0.25;
+
+      // Адаптация для мобильных экранов
+      if (window.innerWidth < 768) {
+        offTop = 50; // ближе к платформе
+        pad = 4; // меньше отступ между кирпичами
+      }
 
       function resizeCanvas() {
         W = window.innerWidth;
