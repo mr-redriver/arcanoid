@@ -80,6 +80,7 @@
       <div id="overlay">
         <span id="score">Очки: 0</span>
         <span id="lives" style="margin-left: 20px">Жизни: 3</span>
+        <span>Версия 0.1.2</span>
       </div>
     </div>
 
@@ -382,6 +383,9 @@
           });
           video.srcObject = stream;
 
+          // 👇 Явный вызов play() для мобильных браузеров
+          await video.play();
+
           const camera = new Camera(video, {
             onFrame: async () => {
               await hands.send({ image: video });
@@ -391,13 +395,16 @@
           });
           camera.start();
 
-          const waitForVideo = setInterval(() => {
-            if (video.readyState >= 2) {
-              clearInterval(waitForVideo);
+          // 👇 Вместо setInterval — событие, которое гарантирует реальный кадр
+          video.addEventListener(
+            "playing",
+            () => {
+              console.log("Видео запущено, стартуем игру");
               initGame();
               loop(performance.now());
-            }
-          }, 200);
+            },
+            { once: true }
+          );
         } catch (err) {
           alert("Не удалось получить доступ к камере: " + err.message);
           console.error(err);
