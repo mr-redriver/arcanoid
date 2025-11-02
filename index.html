@@ -470,6 +470,11 @@
       document.body.appendChild(startBtn);
 
       startBtn.addEventListener("click", async () => {
+        for (let key in sounds) {
+          sounds[key].play().then(() => sounds[key].pause());
+          sounds[key].currentTime = 0;
+        }
+
         startBtn.remove();
         await startCameraAndGame();
       });
