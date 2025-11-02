@@ -127,7 +127,7 @@
         if (paddle && ball) {
           paddle.w = W * 0.15;
           paddle.h = 14;
-          paddle.y = H - 60;
+          paddle.y = H * 0.9;
           paddle.x = Math.min(paddle.x, W - paddle.w);
           ball.x = Math.min(ball.x, W - ball.r);
           ball.y = Math.min(ball.y, H - ball.r);
@@ -137,7 +137,7 @@
 
       function initGame() {
         resizeCanvas();
-        paddle = { w: W * 0.15, h: 14, x: W / 2 - (W * 0.15) / 2, y: H - 60 };
+        paddle = { w: W * 0.15, h: 14, x: W / 2 - (W * 0.15) / 2, y: H * 0.9 };
         ball = { r: 10, x: W / 2, y: H / 2, vx: 6, vy: -6 };
         bw = (W - 2 * offLeft - (cols - 1) * pad) / cols;
         bh = 20;
