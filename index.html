@@ -1,221 +1,158 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <title>Арканоид с управлением жестами</title>
     <style>
       html,
       body {
         margin: 0;
         padding: 0;
-        overflow: hidden;
-        background: #000;
-        touch-action: none; /* предотвращает случайные свайпы */
-        user-select: none;
-      }
-
-      #gameContainer {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background: radial-gradient(circle at 30% 20%, #0a1924, #000814);
-      }
-
-      #game {
-        border-radius: 12px;
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
-        background: linear-gradient(#061620, #0d1e28);
         width: 100%;
         height: 100%;
+        overflow: hidden;
+        background: #000;
+        touch-action: none;
       }
-
-      #overlay {
+      canvas#game {
         position: absolute;
-        top: 1rem;
-        left: 50%;
-        transform: translateX(-50%);
-        font-family: Arial, sans-serif;
-        color: #fff;
-        font-size: clamp(14px, 3vw, 20px); /* адаптивный размер текста */
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-        display: flex;
-        gap: 1.2rem;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
       }
-
-      #miniVideo {
+      video#miniVideo {
         position: absolute;
-        right: 0.8rem;
-        top: 0.8rem;
-        width: 140px;
-        height: 100px;
+        right: 10px;
+        bottom: 10px;
+        width: 120px;
+        height: 90px;
+        border: 2px solid #fff;
         border-radius: 8px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
-        transform: scaleX(-1);
-        object-fit: cover;
+        z-index: 10;
       }
-
-      @media (max-width: 768px) {
-        #miniVideo {
-          width: 100px;
-          height: 75px;
-          right: 0.5rem;
-          top: 0.5rem;
-        }
-
-        #overlay {
-          flex-direction: column;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: clamp(12px, 4vw, 18px);
-        }
+      #startButton {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #28a745;
+        color: white;
+        font-size: 1.5em;
+        border: none;
+        border-radius: 12px;
+        padding: 15px 25px;
+        z-index: 20;
+        cursor: pointer;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
       }
     </style>
   </head>
   <body>
-    <div id="gameContainer">
-      <canvas id="game"></canvas>
-      <video id="miniVideo" autoplay muted playsinline></video>
-      <div id="overlay">
-        <span id="score">Очки: 0</span>
-        <span id="lives" style="margin-left: 20px">Жизни: 3</span>
-      </div>
-    </div>
+    <button id="startButton">▶️ Начать игру</button>
+    <video id="miniVideo" autoplay playsinline muted></video>
+    <canvas id="game"></canvas>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <!--  Главный модуль распознавания рук. -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <!--  Вспомогательный модуль для работы с веб-камерой. -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <!-- Модуль для визуализации руки на canvas, используется для получения координат -->
-
     <script>
-      const video = document.getElementById("miniVideo");
+      let W, H;
       const gameCanvas = document.getElementById("game");
       const ctx = gameCanvas.getContext("2d");
+      const video = document.getElementById("miniVideo");
+      const startButton = document.getElementById("startButton");
 
-      let W = 0,
-        H = 0;
-      let score = 0,
-        lives = 3,
-        paused = false,
-        gameOver = false;
-      let paddle,
-        ball,
-        bw,
-        bh,
-        bricks = [];
-      let rows = 6,
-        cols = 10,
-        pad = 8,
-        offTop = 100,
-        offLeft = 60;
-      let pointX = 0,
-        fingersUp = 0,
-        gestureCooldown = 0;
-      const smoothFactor = 0.25;
-
-      // Адаптация для мобильных экранов
-      if (window.innerWidth < 768) {
-        offTop = window.innerHeight * 0.08; // ~8% от высоты экрана
-        pad = 4; // меньше отступ между кирпичами
-      }
       function resizeCanvas() {
         W = window.innerWidth;
         H = window.innerHeight;
         gameCanvas.width = W;
         gameCanvas.height = H;
-
-        // Пересчитываем размеры элементов, если игра уже запущена
-        if (paddle && ball) {
-          paddle.w = W * 0.15;
-          paddle.h = 14;
-          paddle.y = H - 60;
-          paddle.x = Math.min(paddle.x, W - paddle.w);
-          ball.x = Math.min(ball.x, W - ball.r);
-          ball.y = Math.min(ball.y, H - ball.r);
-        }
       }
       window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
 
-      function initGame() {
-        resizeCanvas();
-        paddle = { w: W * 0.15, h: 14, x: W / 2 - (W * 0.15) / 2, y: H - 60 };
-        ball = { r: 10, x: W / 2, y: H / 2, vx: 6, vy: -6 };
+      // --- Игровое состояние ---
+      let score = 0,
+        lives = 3,
+        paused = false,
+        gameOver = false;
+      let paddle = { w: W * 0.18, h: 14, x: W / 2, y: H - 70 };
+      let ball = { r: 10, x: W / 2, y: H / 2, vx: 6, vy: -6 };
+      let rows = 6,
+        cols = 10,
+        pad = 8,
+        offTop = 100,
+        offLeft = 60;
+      let bw,
+        bh,
+        bricks = [];
+      let pointX = W / 2,
+        fingersUp = 0,
+        gestureCooldown = 0;
+      const smoothFactor = 0.25;
+      let speedMultiplier = 1;
+
+      function initBricks() {
         bw = (W - 2 * offLeft - (cols - 1) * pad) / cols;
         bh = 20;
         bricks = [];
         for (let r = 0; r < rows; r++) {
-          const row = [];
-          for (let c = 0; c < cols; c++) row.push({ alive: true });
-          bricks.push(row);
+          for (let c = 0; c < cols; c++) {
+            bricks.push({
+              x: offLeft + c * (bw + pad),
+              y: offTop + r * (bh + pad),
+              active: true,
+            });
+          }
         }
+      }
+      function resetGame() {
         score = 0;
         lives = 3;
         gameOver = false;
-        paused = false;
-        pointX = W / 2;
-        updateUI();
+        ball = { r: 10, x: W / 2, y: H / 2, vx: 6, vy: -6 };
+        initBricks();
       }
-
-      function resetGame() {
-        initGame();
-      }
-
       function updateUI() {
-        document.getElementById("score").textContent = "Очки: " + score;
-        document.getElementById("lives").textContent = "Жизни: " + lives;
+        ctx.font = "20px sans-serif";
+        ctx.fillStyle = "white";
+        ctx.fillText(`Очки: ${score}`, 20, 30);
+        ctx.fillText(`Жизни: ${lives}`, W - 130, 30);
       }
-
-      function drawOverlay() {
-        if (!gameOver) return;
-        ctx.fillStyle = "rgba(0,0,0,0.6)";
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 48px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("Игра окончена", W / 2, H / 2 - 40);
-        ctx.font = "24px Arial";
-        ctx.fillText(
-          "Сожмите кулак (✊), чтобы перезапустить",
-          W / 2,
-          H / 2 + 10
-        );
-      }
-
       function draw() {
         ctx.clearRect(0, 0, W, H);
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const b = bricks[r][c];
-            if (!b.alive) continue;
-            const bx = offLeft + c * (bw + pad),
-              by = offTop + r * (bh + pad);
-            ctx.fillStyle = `hsl(${200 - r * 20},70%,${45 + r * 5}%)`;
-            ctx.fillRect(bx, by, bw, bh);
-          }
-        }
-        ctx.fillStyle = "#f4f4f4";
-        ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+        // Мяч
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.r, 0, 2 * Math.PI);
-        ctx.fillStyle = "#ffd27f";
+        ctx.fillStyle = "#ff0";
         ctx.fill();
-        drawOverlay();
+        // Платформа
+        ctx.fillStyle = "#0ff";
+        ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+        // Кирпичи
+        ctx.fillStyle = "#f44";
+        for (let b of bricks) {
+          if (b.active) ctx.fillRect(b.x, b.y, bw, bh);
+        }
+        updateUI();
       }
-
       function updatePhysics(dt) {
         if (paused || gameOver) return;
-        const step = Math.min(dt, 30);
-        let nextX = ball.x + (ball.vx * step) / 16;
-        let nextY = ball.y + (ball.vy * step) / 16;
+        let nextX = ball.x + ball.vx * speedMultiplier;
+        let nextY = ball.y + ball.vy * speedMultiplier;
 
-        // Столкновения со стенами
+        // Отскоки
         if (nextX - ball.r < 0) {
           nextX = ball.r;
           ball.vx = Math.abs(ball.vx);
-        } else if (nextX + ball.r > W) {
+        }
+        if (nextX + ball.r > W) {
           nextX = W - ball.r;
           ball.vx = -Math.abs(ball.vx);
         }
@@ -240,58 +177,41 @@
           nextY = paddle.y - ball.r - 1;
         }
 
-        // Потеря жизни
+        // Падение
         if (nextY - ball.r > H) {
           lives--;
-          updateUI();
           if (lives <= 0) {
             gameOver = true;
-            return;
-          } else {
-            nextX = W / 2;
-            nextY = H / 2;
-            ball.vx = 6;
-            ball.vy = -6;
             paused = true;
-            setTimeout(() => (paused = false), 700);
+            return;
           }
+          nextX = W / 2;
+          nextY = H / 2;
+          ball.vx = 6;
+          ball.vy = -6;
+          paused = true;
+          setTimeout(() => (paused = false), 700);
         }
 
         // Кирпичи
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const b = bricks[r][c];
-            if (!b.alive) continue;
-            const bx = offLeft + c * (bw + pad),
-              by = offTop + r * (bh + pad);
-            if (
-              nextX + ball.r > bx &&
-              nextX - ball.r < bx + bw &&
-              nextY + ball.r > by &&
-              nextY - ball.r < by + bh
-            ) {
-              b.alive = false;
-              score += 10;
-              updateUI();
-
-              // 🔥 Новое: ускоряем мяч в зависимости от счёта
-              const speedMul = 1 + Math.min(score / 500, 1.5); // максимум ×2.5
-              const dir = Math.atan2(ball.vy, ball.vx);
-              const baseSpeed = 6 * speedMul;
-              ball.vx = baseSpeed * Math.cos(dir);
-              ball.vy = baseSpeed * Math.sin(dir);
-
-              ball.vy = -ball.vy;
-              nextY += ball.vy > 0 ? 4 : -4;
-              break;
-            }
+        for (let b of bricks) {
+          if (
+            b.active &&
+            nextX > b.x &&
+            nextX < b.x + bw &&
+            nextY > b.y &&
+            nextY < b.y + bh
+          ) {
+            b.active = false;
+            score++;
+            speedMultiplier = 1 + score / 50; // ускорение!
+            ball.vy *= -1;
+            break;
           }
         }
-
         ball.x = nextX;
         ball.y = nextY;
       }
-
       let last = performance.now();
       function loop(t) {
         const dt = t - last;
@@ -300,8 +220,10 @@
         draw();
         requestAnimationFrame(loop);
       }
+      initBricks();
+      loop(performance.now());
 
-      // --- MediaPipe setup ---
+      // --- MediaPipe ---
       const hands = new Hands({
         locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
       });
@@ -311,13 +233,10 @@
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7,
       });
-
       hands.onResults((res) => {
         if (!res.multiHandLandmarks || res.multiHandLandmarks.length === 0)
           return;
         const lm = res.multiHandLandmarks[0];
-
-        // --- Подсчёт пальцев ---
         const tips = [8, 12, 16, 20];
         let count = 0;
         for (let i = 0; i < tips.length; i++)
@@ -325,68 +244,36 @@
         if (lm[4].x > lm[3].x) count++;
         fingersUp = count;
 
-        // --- Движение платформы ---
         const idx = lm[8];
         const targetX = (1 - idx.x) * W;
         pointX = pointX * (1 - smoothFactor) + targetX * smoothFactor;
         const rel = pointX / W;
         paddle.x = rel * (W - paddle.w);
 
-        // --- Распознавание тыльной стороны ---
-        function isBackOfHand(lm) {
-          const wrist = lm[0];
-          const indexBase = lm[5];
-          const pinkyBase = lm[17];
-
-          // Вектор ладони
-          const v1 = {
-            x: indexBase.x - wrist.x,
-            y: indexBase.y - wrist.y,
-            z: indexBase.z - wrist.z,
-          };
-          const v2 = {
-            x: pinkyBase.x - wrist.x,
-            y: pinkyBase.y - wrist.y,
-            z: pinkyBase.z - wrist.z,
-          };
-
-          // Вектор нормали (перпендикуляр к плоскости ладони)
-          const normal = {
-            x: v1.y * v2.z - v1.z * v2.y,
-            y: v1.z * v2.x - v1.x * v2.z,
-            z: v1.x * v2.y - v1.y * v2.x,
-          };
-
-          // Если нормаль указывает "от камеры" → тыльная сторона
-          return normal.z > 0;
-        }
-
-        // --- Управление ---
         if (gestureCooldown > 0) gestureCooldown--;
-
         if (gestureCooldown === 0) {
-          // Пауза: раскрытая ладонь
+          const palmZ = lm[0].z;
+          const wristZ = lm[9].z;
+          const backGesture = palmZ > wristZ + 0.05; // тыльная сторона руки
           if (fingersUp === 5 && !gameOver) {
             paused = !paused;
             gestureCooldown = 30;
-          }
-          // Перезапуск: кулак + тыльная сторона
-          else if (fingersUp === 0 && isBackOfHand(lm)) {
+          } else if (backGesture && gameOver) {
             resetGame();
+            paused = false;
             gestureCooldown = 30;
           }
         }
       });
 
-      // --- запуск камеры и игры ---
-      async function startCameraAndGame() {
+      // --- Запуск камеры (только по клику) ---
+      startButton.addEventListener("click", async () => {
+        startButton.style.display = "none";
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-            audio: false,
+            video: true,
           });
           video.srcObject = stream;
-
           const camera = new Camera(video, {
             onFrame: async () => {
               await hands.send({ image: video });
@@ -395,41 +282,12 @@
             height: 120,
           });
           camera.start();
-
-          const waitForVideo = setInterval(() => {
-            if (video.readyState >= 2) {
-              clearInterval(waitForVideo);
-              initGame();
-              loop(performance.now());
-            }
-          }, 200);
         } catch (err) {
-          alert("Не удалось получить доступ к камере: " + err.message);
+          alert(
+            "Не удалось получить доступ к камере. Разрешите использование камеры."
+          );
           console.error(err);
         }
-      }
-
-      // 🔹 Добавляем кнопку для запроса доступа (обязательно для мобильных)
-      const startBtn = document.createElement("button");
-      startBtn.textContent = "Запустить камеру и игру";
-      startBtn.style.cssText = `
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			padding: 14px 24px;
-			font-size: 18px;
-			background: #0066ff;
-			color: white;
-			border: none;
-			border-radius: 8px;
-			box-shadow: 0 0 20px rgba(0,0,0,0.4);
-		`;
-      document.body.appendChild(startBtn);
-
-      startBtn.addEventListener("click", async () => {
-        startBtn.remove();
-        await startCameraAndGame();
       });
     </script>
   </body>
